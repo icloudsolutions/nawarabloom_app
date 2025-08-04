@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Configuration pour permettre le trafic HTTP et HTTPS -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">nawarabloom.com</domain>
+        <domain includeSubdomains="true">www.nawarabloom.com</domain>
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">127.0.0.1</domain>
+        <domain includeSubdomains="true">10.0.2.2</domain>
+    </domain-config>
+    
+    <!-- Configuration globale pour le debug -->
+    <debug-overrides>
+        <trust-anchors>
+            <!-- Faire confiance aux certificats système par défaut -->
+            <certificates src="system"/>
+            <!-- Faire confiance aux certificats utilisateur pour le debug -->
+            <certificates src="user"/>
+        </trust-anchors>
+    </debug-overrides>
+    
+    <!-- Configuration de base pour tous les domaines -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system"/>
+        </trust-anchors>
+    </base-config>
+</network-security-config>

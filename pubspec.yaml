@@ -1,0 +1,54 @@
+name: nawarabloom_app
+description: Application Flutter pour NawaraBloom Shop avec WebView
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: ">=3.10.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # WebView pour afficher le site web
+  webview_flutter: ^4.4.4
+  webview_flutter_android: ^3.13.0
+  webview_flutter_wkwebview: ^3.10.0
+  
+  # Icônes Material Design
+  cupertino_icons: ^1.0.6
+  
+  # Package pour générer les icônes d'application
+  flutter_launcher_icons: ^0.13.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+# Configuration pour générer les icônes d'application
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/images/logo.png"
+  min_sdk_android: 21
+  web:
+    generate: true
+    image_path: "assets/images/logo.png"
+    background_color: "#2E7D32"
+    theme_color: "#2E7D32"
+  windows:
+    generate: true
+    image_path: "assets/images/logo.png"
+    icon_size: 48
+  macos:
+    generate: true
+    image_path: "assets/images/logo.png"
+
+flutter:
+  uses-material-design: true
+  
+  # Assets pour les images et logos
+  assets:
+    - assets/images/
