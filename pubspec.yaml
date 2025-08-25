@@ -1,7 +1,7 @@
-name: nawarabloom_app
-description: Application Flutter pour NawaraBloom Shop avec WebView
+name: nawarabloom
+description: The official NawaraBloom app
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.1.0+1
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -12,9 +12,8 @@ dependencies:
     sdk: flutter
   
   # WebView pour afficher le site web
-  webview_flutter: ^4.4.4
-  webview_flutter_android: ^3.13.0
-  webview_flutter_wkwebview: ^3.10.0
+  flutter_inappwebview: ^6.0.0
+
   
   # Icônes Material Design
   cupertino_icons: ^1.0.6
@@ -51,4 +50,4 @@ flutter:
   
   # Assets pour les images et logos
   assets:
-    - assets/images/
+    - assets/images/logo.png

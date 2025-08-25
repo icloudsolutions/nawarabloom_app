@@ -3,10 +3,9 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:webview_flutter/webview_flutter.dart';
-import 'package:webview_flutter_android/webview_flutter_android.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
-void main() {
+void main() async {
   // Initialiser la plateforme WebView avant de lancer l'app
   WidgetsFlutterBinding.ensureInitialized();
   
@@ -20,14 +19,9 @@ void main() {
     ),
   );
   
-  // Enregistrer les implémentations de plateforme
-  if (WebViewPlatform.instance is! AndroidWebViewPlatform) {
-    WebViewPlatform.instance = AndroidWebViewPlatform();
-  }
-  
-  // Activer le mode debug pour WebView Android
-  if (kDebugMode) {
-    AndroidWebViewController.enableDebugging(true);
+  // Initialiser InAppWebView
+  if (Platform.isAndroid) {
+    await InAppWebViewController.setWebContentsDebuggingEnabled(kDebugMode);
   }
   
   runApp(const NawaraBloomApp());
@@ -42,8 +36,9 @@ class NawaraBloomApp extends StatelessWidget {
       title: 'NawaraBloom',
       theme: ThemeData(
         useMaterial3: true,
+        // Mise à jour de la palette de couleurs pour correspondre au logo
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF2E7D32),
+          seedColor: const Color(0xFF5C1C5C), // Couleur du logo (un violet profond)
           brightness: Brightness.light,
         ),
         appBarTheme: const AppBarTheme(
@@ -56,6 +51,7 @@ class NawaraBloomApp extends StatelessWidget {
             fontSize: 20,
             fontWeight: FontWeight.w600,
             letterSpacing: 0.5,
+            // Pour une police personnalisée, ajoutez fontFamily: 'NomDeLaPolice' ici
           ),
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
@@ -73,6 +69,8 @@ class NawaraBloomApp extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
           ),
           elevation: 8,
+          // Couleur d'erreur mise à jour pour correspondre au nouveau thème
+          backgroundColor: const Color(0xFFD81B60),
         ),
       ),
       home: const WebViewScreen(),
@@ -90,7 +88,7 @@ class WebViewScreen extends StatefulWidget {
 
 class _WebViewScreenState extends State<WebViewScreen>
     with TickerProviderStateMixin {
-  late final WebViewController _controller;
+  InAppWebViewController? _webViewController;
   bool _isLoading = true;
   bool _hasError = false;
   String _currentUrl = 'https://nawarabloom.com/shop';
@@ -99,11 +97,14 @@ class _WebViewScreenState extends State<WebViewScreen>
   late AnimationController _progressController;
   late Animation<double> _fadeAnimation;
 
+  // Configuration WebView
+  late InAppWebViewSettings _settings;
+
   @override
   void initState() {
     super.initState();
     _initializeAnimations();
-    _initializeWebView();
+    _initializeWebViewSettings();
   }
 
   @override
@@ -133,120 +134,77 @@ class _WebViewScreenState extends State<WebViewScreen>
     ));
   }
 
-  void _initializeWebView() {
-    _controller = WebViewController();
-
-    if (_controller.platform is AndroidWebViewController) {
-      if (kDebugMode) {
-        AndroidWebViewController.enableDebugging(true);
-        print('🐛 WebView Debug Mode activé pour Android');
-      }
-      (_controller.platform as AndroidWebViewController)
-          .setMediaPlaybackRequiresUserGesture(false);
-    }
-
-    _controller
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(const Color(0x00000000))
-      ..enableZoom(true)
-      ..setUserAgent('Mozilla/5.0 (Linux; Android 12; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36 NawaraBloomApp/1.0')
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onProgress: (int progress) {
-            setState(() {
-              _loadingProgress = progress / 100.0;
-            });
-            _progressController.animateTo(_loadingProgress);
-            
-            if (kDebugMode) {
-              print('🔄 Progression: $progress%');
-            }
-          },
-          onPageStarted: (String url) {
-            if (kDebugMode) {
-              print('🌐 Début du chargement: $url');
-            }
-            setState(() {
-              _isLoading = true;
-              _hasError = false;
-              _currentUrl = url;
-              _loadingProgress = 0.0;
-            });
-            _fadeController.forward();
-          },
-          onPageFinished: (String url) {
-            if (kDebugMode) {
-              print('✅ Chargement terminé: $url');
-            }
-            setState(() {
-              _isLoading = false;
-              _loadingProgress = 1.0;
-            });
-            _fadeController.reverse();
-            
-            // Haptic feedback pour indiquer que la page est chargée
-            HapticFeedback.lightImpact();
-          },
-          onWebResourceError: (WebResourceError error) {
-            if (kDebugMode) {
-              print('❌ Erreur WebView: ${error.description}');
-              print('   Code d\'erreur: ${error.errorCode}');
-              print('   Type d\'erreur: ${error.errorType}');
-            }
-            
-            setState(() {
-              _hasError = true;
-              _isLoading = false;
-            });
-            
-            _showModernErrorSnackBar(error);
-            HapticFeedback.heavyImpact();
-          },
-          onNavigationRequest: (NavigationRequest request) {
-            if (kDebugMode) {
-              print('🔗 Navigation: ${request.url}');
-            }
-            
-            if (request.url.startsWith('https://nawarabloom.com') ||
-                request.url.startsWith('http://nawarabloom.com')) {
-              return NavigationDecision.navigate;
-            }
-            return NavigationDecision.prevent;
-          },
-        ),
-      )
-      ..addJavaScriptChannel(
-        'FlutterChannel',
-        onMessageReceived: (JavaScriptMessage message) {
-          if (kDebugMode) {
-            print('📱 Message JS: ${message.message}');
-          }
-        },
-      )
-      ..loadRequest(Uri.parse('https://nawarabloom.com/shop'));
+  void _initializeWebViewSettings() {
+    _settings = InAppWebViewSettings(
+      // Configuration générale
+      useShouldOverrideUrlLoading: true,
+      mediaPlaybackRequiresUserGesture: false,
+      javaScriptEnabled: true,
+      javaScriptCanOpenWindowsAutomatically: true,
+      useHybridComposition: true,
+      
+      // Configuration Android
+      allowContentAccess: true,
+      allowFileAccess: true,
+      allowFileAccessFromFileURLs: false,
+      allowUniversalAccessFromFileURLs: false,
+      cacheMode: CacheMode.LOAD_DEFAULT,
+      clearCache: false,
+      databaseEnabled: true,
+      domStorageEnabled: true,
+      geolocationEnabled: true,
+      loadsImagesAutomatically: true,
+      mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
+      supportZoom: true,
+      builtInZoomControls: false,
+      displayZoomControls: false,
+      
+      // Configuration iOS
+      allowsInlineMediaPlayback: true,
+      allowsBackForwardNavigationGestures: true,
+      allowsPictureInPictureMediaPlayback: true,
+      isFraudulentWebsiteWarningEnabled: true,
+      selectionGranularity: SelectionGranularity.DYNAMIC,
+      
+      // Configuration commune
+      userAgent: 'Mozilla/5.0 (Linux; Android 12; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36 NawaraBloomApp/1.0',
+      applicationNameForUserAgent: 'NawaraBloomApp',
+      
+      // Performance
+      algorithmicDarkeningAllowed: false,
+      disableDefaultErrorPage: false,
+      
+      // Debug
+      //debuggingEnabled: kDebugMode,
+    );
     
     if (kDebugMode) {
-      print('🚀 webView initialisé');
+      print('🚀 WebView Settings initialisés');
     }
   }
 
-  void _showModernErrorSnackBar(WebResourceError error) {
+  void _showModernErrorSnackBar(String errorDescription, int errorCode) {
     String errorMessage = 'Erreur de connexion';
     String actionMessage = 'Vérifiez votre connexion internet';
     IconData errorIcon = Icons.wifi_off_rounded;
     
-    switch (error.errorType) {
-      case WebResourceErrorType.hostLookup:
+    // Mapping des codes d'erreur courants
+    switch (errorCode) {
+      case -2: // NAME_NOT_RESOLVED
         errorMessage = 'Serveur introuvable';
         errorIcon = Icons.dns_rounded;
         break;
-      case WebResourceErrorType.timeout:
+      case -7: // TIMED_OUT
         errorMessage = 'Délai d\'attente dépassé';
         errorIcon = Icons.timer_off_rounded;
         break;
-      case WebResourceErrorType.connect:
-        errorMessage = 'Connexion impossible';
+      case -6: // CONNECTION_REFUSED
+        errorMessage = 'Connexion refusée';
         errorIcon = Icons.signal_wifi_connected_no_internet_4_rounded;
+        break;
+      case -105: // NAME_RESOLUTION_FAILED
+        errorMessage = 'Résolution DNS échouée';
+        errorIcon = Icons.dns_rounded;
         break;
       default:
         break;
@@ -282,7 +240,8 @@ class _WebViewScreenState extends State<WebViewScreen>
             ),
           ],
         ),
-        backgroundColor: const Color(0xFFD32F2F),
+        // Utilisation d'une couleur d'erreur qui s'harmonise avec le nouveau thème
+        backgroundColor: const Color(0xFFD81B60),
         duration: const Duration(seconds: 6),
         action: SnackBarAction(
           label: 'Réessayer',
@@ -298,15 +257,15 @@ class _WebViewScreenState extends State<WebViewScreen>
       print('🔄 Actualisation demandée');
     }
     HapticFeedback.mediumImpact();
-    await _controller.reload();
+    await _webViewController?.reload();
   }
 
   Future<bool> _onWillPop() async {
-    if (await _controller.canGoBack()) {
+    if (_webViewController != null && await _webViewController!.canGoBack()) {
       if (kDebugMode) {
         print('⬅️ Navigation arrière');
       }
-      await _controller.goBack();
+      await _webViewController!.goBack();
       return false;
     }
     return true;
@@ -344,9 +303,10 @@ class _WebViewScreenState extends State<WebViewScreen>
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
+                  // Couleurs du gradient mises à jour
                   colors: [
-                    Color(0xFF2E7D32),
-                    Color(0xFF388E3C),
+                    Color(0xFF5C1C5C),
+                    Color(0xFF8E24AA),
                   ],
                 ),
               ),
@@ -375,7 +335,145 @@ class _WebViewScreenState extends State<WebViewScreen>
                       ),
                     ],
                   ),
-                  child: WebViewWidget(controller: _controller),
+                  child: InAppWebView(
+                    initialUrlRequest: URLRequest(
+                      url: WebUri('https://nawarabloom.com/shop'),
+                    ),
+                    initialSettings: _settings,
+                    onWebViewCreated: (controller) {
+                      _webViewController = controller;
+                      
+                      // Ajouter un JavaScript channel
+                      controller.addJavaScriptHandler(
+                        handlerName: 'FlutterChannel',
+                        callback: (args) {
+                          if (kDebugMode) {
+                            print('📱 Message JS: ${args.first}');
+                          }
+                        },
+                      );
+                      
+                      if (kDebugMode) {
+                        print('🌐 WebView créé avec succès');
+                      }
+                    },
+                    onLoadStart: (controller, url) {
+                      if (kDebugMode) {
+                        print('🌐 Début du chargement: $url');
+                      }
+                      setState(() {
+                        _isLoading = true;
+                        _hasError = false;
+                        _currentUrl = url?.toString() ?? '';
+                        _loadingProgress = 0.0;
+                      });
+                      _fadeController.forward();
+                    },
+                    onLoadStop: (controller, url) {
+                      if (kDebugMode) {
+                        print('✅ Chargement terminé: $url');
+                      }
+                      setState(() {
+                        _isLoading = false;
+                        _loadingProgress = 1.0;
+                        _currentUrl = url?.toString() ?? '';
+                      });
+                      _fadeController.reverse();
+                      
+                      // Haptic feedback pour indiquer que la page est chargée
+                      HapticFeedback.lightImpact();
+                    },
+                    onProgressChanged: (controller, progress) {
+                      setState(() {
+                        _loadingProgress = progress / 100.0;
+                      });
+                      _progressController.animateTo(_loadingProgress);
+                      
+                      if (kDebugMode) {
+                        print('📄 Progression: $progress%');
+                      }
+                    },
+                    onReceivedError: (controller, request, error) {
+                      if (kDebugMode) {
+                        print('❌ Erreur WebView: ${error.description}');
+                        print('   Code d\'erreur: ${error.type}');
+                        print('   URL: ${request.url}');
+                      }
+                      
+                      setState(() {
+                        _hasError = true;
+                        _isLoading = false;
+                      });
+                      
+                      _showModernErrorSnackBar(error.description, error.type.toNativeValue() ?? 0);                      
+                      HapticFeedback.heavyImpact();
+                    },
+                    onReceivedHttpError: (controller, request, response) {
+                      if (kDebugMode) {
+                        print('🔴 Erreur HTTP: ${response.statusCode}');
+                        print('   URL: ${request.url}');
+                      }
+                      
+                      if (response.statusCode != null && response.statusCode! >= 400) {
+                        _showModernErrorSnackBar(
+                          'Erreur HTTP ${response.statusCode}', 
+                          response.statusCode ?? 0,
+                        );
+                      }
+                    },
+                    shouldOverrideUrlLoading: (controller, navigationAction) async {
+                      final url = navigationAction.request.url?.toString() ?? '';
+                      
+                      if (kDebugMode) {
+                        print('🔗 Navigation: $url');
+                      }
+                      
+                      // Permettre la navigation vers nawarabloom.com
+                      if (url.startsWith('https://nawarabloom.com') ||
+                          url.startsWith('http://nawarabloom.com')) {
+                        return NavigationActionPolicy.ALLOW;
+                      }
+                      
+                      // Bloquer les autres domaines
+                      return NavigationActionPolicy.CANCEL;
+                    },
+                    onPermissionRequest: (controller, request) async {
+                      // Gérer les demandes de permission (géolocalisation, caméra, etc.)
+                      if (kDebugMode) {
+                        print('🔒 Demande de permission: ${request.resources}');
+                      }
+                      
+                      return PermissionResponse(
+                        resources: request.resources,
+                        action: PermissionResponseAction.GRANT,
+                      );
+                    },
+                    onGeolocationPermissionsShowPrompt: (controller, origin) async {
+                      if (kDebugMode) {
+                        print('📍 Demande de géolocalisation: $origin');
+                      }
+                      
+                      // Autoriser la géolocalisation pour nawarabloom.com
+                      if (origin.contains('nawarabloom.com')) {
+                        return GeolocationPermissionShowPromptResponse(
+                          origin: origin,
+                          allow: true,
+                          retain: true,
+                        );
+                      }
+                      
+                      return GeolocationPermissionShowPromptResponse(
+                        origin: origin,
+                        allow: false,
+                        retain: false,
+                      );
+                    },
+                    onConsoleMessage: (controller, consoleMessage) {
+                      if (kDebugMode) {
+                        print('🖥️ Console: ${consoleMessage.message}');
+                      }
+                    },
+                  ),
                 ),
               ),
             ),
@@ -393,7 +491,7 @@ class _WebViewScreenState extends State<WebViewScreen>
                       value: _progressController.value,
                       backgroundColor: Colors.grey.shade200,
                       valueColor: const AlwaysStoppedAnimation<Color>(
-                        Color(0xFF4CAF50),
+                        Color(0xFF8E24AA), // Couleur de progression mise à jour
                       ),
                       minHeight: 3,
                     );
@@ -403,10 +501,10 @@ class _WebViewScreenState extends State<WebViewScreen>
             
             // Overlay de chargement avec animation
             if (_isLoading)
-              FadeTransition(
-                opacity: _fadeAnimation,
-                child: Positioned.fill(
-                  top: kToolbarHeight + MediaQuery.of(context).padding.top + 24,
+              Positioned.fill(
+                top: kToolbarHeight + MediaQuery.of(context).padding.top + 24,
+                child: FadeTransition(
+                  opacity: _fadeAnimation,
                   child: Container(
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.95),
@@ -440,13 +538,13 @@ class _WebViewScreenState extends State<WebViewScreen>
                               return Container(
                                 padding: const EdgeInsets.all(16),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF4CAF50).withOpacity(0.1),
+                                  color: const Color(0xFF8E24AA).withOpacity(0.1),
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: const Icon(
                                   Icons.local_florist_rounded,
                                   size: 48,
-                                  color: Color(0xFF4CAF50),
+                                  color: Color(0xFF8E24AA),
                                 ),
                               );
                             },
@@ -457,8 +555,9 @@ class _WebViewScreenState extends State<WebViewScreen>
                           'NawaraBloom',
                           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                             fontWeight: FontWeight.bold,
-                            color: const Color(0xFF2E7D32),
+                            color: const Color(0xFF5C1C5C),
                             letterSpacing: 1.2,
+                            // Pour une police personnalisée, ajoutez fontFamily: 'NomDeLaPolice' ici
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -478,7 +577,7 @@ class _WebViewScreenState extends State<WebViewScreen>
                                 value: _progressController.value,
                                 backgroundColor: Colors.grey.shade200,
                                 valueColor: const AlwaysStoppedAnimation<Color>(
-                                  Color(0xFF4CAF50),
+                                  Color(0xFF8E24AA),
                                 ),
                                 borderRadius: BorderRadius.circular(4),
                               );
@@ -494,7 +593,7 @@ class _WebViewScreenState extends State<WebViewScreen>
                               style: const TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w500,
-                                color: Color(0xFF4CAF50),
+                                color: Color(0xFF8E24AA),
                               ),
                             );
                           },
@@ -566,18 +665,20 @@ class _WebViewScreenState extends State<WebViewScreen>
               HapticFeedback.selectionClick();
               switch (value) {
                 case 'home':
-                  await _controller.loadRequest(
-                    Uri.parse('https://nawarabloom.com/shop'),
+                  await _webViewController?.loadUrl(
+                    urlRequest: URLRequest(
+                      url: WebUri('https://nawarabloom.com/shop'),
+                    ),
                   );
                   break;
                 case 'back':
-                  if (await _controller.canGoBack()) {
-                    await _controller.goBack();
+                  if (_webViewController != null && await _webViewController!.canGoBack()) {
+                    await _webViewController!.goBack();
                   }
                   break;
                 case 'forward':
-                  if (await _controller.canGoForward()) {
-                    await _controller.goForward();
+                  if (_webViewController != null && await _webViewController!.canGoForward()) {
+                    await _webViewController!.goForward();
                   }
                   break;
                 case 'test_connection':
@@ -639,7 +740,7 @@ class _WebViewScreenState extends State<WebViewScreen>
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (context) => DebugInfoSheet(
-        controller: _controller,
+        webViewController: _webViewController,
         currentUrl: _currentUrl,
         isLoading: _isLoading,
       ),
@@ -921,13 +1022,13 @@ class _ConnectionTestSheetState extends State<ConnectionTestSheet> {
 
 // Widget pour les informations de debug simplifié
 class DebugInfoSheet extends StatelessWidget {
-  final WebViewController controller;
+  final InAppWebViewController? webViewController;
   final String currentUrl;
   final bool isLoading;
 
   const DebugInfoSheet({
     super.key,
-    required this.controller,
+    required this.webViewController,
     required this.currentUrl,
     required this.isLoading,
   });
@@ -987,9 +1088,10 @@ class DebugInfoSheet extends StatelessWidget {
                 children: [
                   _buildInfoRow('URL Actuelle', currentUrl),
                   _buildInfoRow('État', isLoading ? 'Chargement...' : 'Chargé'),
-                  _buildInfoRow('JavaScript', 'Activé (Unrestricted)'),
+                  _buildInfoRow('JavaScript', 'Activé'),
                   _buildInfoRow('User Agent', 'NawaraBloomApp/1.0'),
                   _buildInfoRow('Plateforme', Platform.operatingSystem),
+                  _buildInfoRow('WebView', 'flutter_inappwebview'),
                   
                   const SizedBox(height: 24),
                   Row(
@@ -998,7 +1100,7 @@ class DebugInfoSheet extends StatelessWidget {
                         child: ElevatedButton.icon(
                           onPressed: () {
                             Navigator.pop(context);
-                            controller.runJavaScript('''
+                            webViewController?.evaluateJavascript(source: '''
                               console.log('Test JavaScript depuis Flutter');
                               document.body.style.border = '3px solid red';
                               setTimeout(() => {
@@ -1017,12 +1119,53 @@ class DebugInfoSheet extends StatelessWidget {
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: OutlinedButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Fermer'),
+                        child: ElevatedButton.icon(
+                          onPressed: () async {
+                            Navigator.pop(context);
+                            if (webViewController != null) {
+                              final url = await webViewController!.getUrl();
+                              final title = await webViewController!.getTitle();
+                              
+                              if (kDebugMode) {
+                                print('🔍 URL actuelle: $url');
+                                print('📄 Titre: $title');
+                              }
+                              
+                              // Afficher les infos dans un SnackBar
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text('URL: ${url?.toString() ?? 'N/A'}'),
+                                        Text('Titre: ${title ?? 'N/A'}'),
+                                      ],
+                                    ),
+                                    duration: const Duration(seconds: 5),
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                          icon: const Icon(Icons.info_rounded),
+                          label: const Text('Infos Page'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue.shade600,
+                            foregroundColor: Colors.white,
+                          ),
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Fermer'),
+                    ),
                   ),
                 ],
               ),
