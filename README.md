@@ -1,7 +1,3 @@
-Sure! Here's the **full updated `README.md`** with your Flutter GitHub Actions release setup and the **contact info for iCloud Solutions** included at the end:
-
----
-
 ````markdown
 # 🚀 Flutter Project with GitHub Actions APK Release
 
