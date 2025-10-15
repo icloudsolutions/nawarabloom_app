@@ -123,9 +123,4 @@ This project is open-source and available under the [MIT License](LICENSE).
 **📱 WhatsApp:** [+216 50 271 737](https://wa.me/21650271737)
 **🏢 Company:** [iCloud Solutions](https://www.icloud-solutions.net)
 
-```
 
----
-
-Let me know if you also want a version with badges (e.g., build status, Flutter version) or multilingual (French or Arabic) support.
-```
